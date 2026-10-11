@@ -1,0 +1,32 @@
+#!/bin/sh /etc/rc.common
+# Mount UBI volume "ocdata" on the spare mtd "overlay" partition at /etc/openclash.
+# Only mounts an existing ocdata volume; never creates or formats anything.
+START=11
+
+find_ubi() {
+	for d in /sys/class/ubi/ubi[0-9]*; do
+		[ -e "$d/mtd_num" ] && [ "$(cat "$d/mtd_num")" = "$1" ] && { echo "${d##*/}"; return; }
+	done
+}
+
+start() {
+	grep -qs ' /etc/openclash ' /proc/mounts && return 0
+	mtd=$(grep '"overlay"' /proc/mtd | cut -d: -f1 | tr -dc 0-9)
+	[ -n "$mtd" ] || return 0
+	ubi=$(find_ubi "$mtd")
+	attached=0
+	if [ -z "$ubi" ]; then
+		ubiattach -m "$mtd" >/dev/null 2>&1 || { logger -t ocdata "attach mtd$mtd failed"; return 0; }
+		attached=1
+		ubi=$(find_ubi "$mtd")
+	fi
+	if ! ubinfo "/dev/$ubi" -N ocdata >/dev/null 2>&1; then
+		logger -t ocdata "no ocdata volume on mtd$mtd, skip"
+		[ "$attached" = 1 ] && ubidetach -m "$mtd" >/dev/null 2>&1
+		return 0
+	fi
+	mkdir -p /etc/openclash
+	mount -t ubifs -o compr=zstd "$ubi:ocdata" /etc/openclash 2>/dev/null ||
+		mount -t ubifs "$ubi:ocdata" /etc/openclash ||
+		logger -t ocdata "mount failed"
+}

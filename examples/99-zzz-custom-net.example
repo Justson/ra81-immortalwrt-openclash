@@ -1,0 +1,40 @@
+#!/bin/sh
+# One-shot first-boot config for Redmi AX3000 (RA81): LAN/WAN/WiFi.
+# Copy, fill in, pass via CUSTOM_UCI_DEFAULTS=... Private builds only, never publish the result!
+. /lib/functions.sh
+
+# --- LAN ---
+uci -q batch <<EOF
+set network.lan.ipaddr='192.168.31.1'
+set network.lan.netmask='255.255.255.0'
+EOF
+
+# --- WAN: PPPoE ---
+uci -q batch <<EOF
+set network.wan.proto='pppoe'
+set network.wan.username='YOUR_PPPOE_USER'
+set network.wan.password='YOUR_PPPOE_PASSWORD'
+set network.wan.ipv6='0'
+EOF
+uci -q commit network
+
+# --- Wireless: generate radios then set per-band SSID/key ---
+[ -f /etc/config/wireless ] || /sbin/wifi config
+for iface in $(uci -q show wireless | sed -n "s/^wireless\.\([^.]*\)=wifi-iface/\1/p"); do
+	dev=$(uci -q get wireless.$iface.device)
+	band=$(uci -q get wireless.$dev.band)$(uci -q get wireless.$dev.hwmode)
+	uci -q set wireless.$dev.disabled='0'
+	uci -q set wireless.$dev.country='CN'
+	uci -q set wireless.$iface.disabled='0'
+	uci -q set wireless.$iface.mode='ap'
+	uci -q set wireless.$iface.network='lan'
+	uci -q set wireless.$iface.encryption='psk2'
+	uci -q set wireless.$iface.key='YOUR_WIFI_KEY'
+	case "$band" in
+		*5g*|*11a*) uci -q set wireless.$iface.ssid='MyWiFi_5G' ;;
+		*)          uci -q set wireless.$iface.ssid='MyWiFi' ;;
+	esac
+done
+uci -q commit wireless
+
+exit 0

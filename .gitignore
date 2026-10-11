@@ -1,0 +1,8 @@
+*.ubi
+*.bin
+*.gz
+*.xz
+*.ipk
+/in/
+/out/
+99-zzz-custom-net
